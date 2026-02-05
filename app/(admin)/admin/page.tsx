@@ -1,4 +1,4 @@
-import Sidebar from "@/components/layout/sidebar";
+
 import { ChartBar } from "@/components/PFSuser/barChart";
 import CountCards from "@/components/PFSuser/countCards";
 import LatestShipments from "@/components/PFSuser/latestShipments";
@@ -6,7 +6,6 @@ import LatestShipments from "@/components/PFSuser/latestShipments";
 export default function AdminDashboard() {
   return (
     <div className="flex">
-      <Sidebar />
 
       {/* Main content area */}
       <div className="flex w-full justify-center">
