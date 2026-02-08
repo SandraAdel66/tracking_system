@@ -48,32 +48,25 @@ function FormField({ label, children }: { label: string; children: React.ReactNo
 
 export default function CreateShipmentPage() {
   const router = useRouter();
-
-  /* --- Parties & Reference --- */
   const [blNumber, setBlNumber] = useState("");
   const [salesman, setSalesman] = useState("");
   const [shipper, setShipper] = useState("");
   const [consignee, setConsignee] = useState("");
   const [agent, setAgent] = useState<string | undefined>();
 
-  /* --- Shipping Lines --- */
   const [shippingLines, setShippingLines] = useState(["Maersk", "MSC"]);
   const [selectedLine, setSelectedLine] = useState<string | undefined>();
   const [newLineName, setNewLineName] = useState("");
   const [arabicName, setArabicName] = useState("");
   const [lineDialogOpen, setLineDialogOpen] = useState(false); // control modal
 
-  /* --- Route & Carrier --- */
   const [polCountry, setPolCountry] = useState<string | null>(null);
   const [podCountry, setPodCountry] = useState<string | null>(null);
 
-  /* --- Containers --- */
   const [containers, setContainers] = useState([{ id: "", type: "" }]);
 
-  /* --- Documents --- */
   const [documents, setDocuments] = useState<File[]>([]);
 
-  /* --- Handlers --- */
   const addShippingLine = () => {
     if (!newLineName) return;
     setShippingLines((prev) => [...prev, newLineName]);
@@ -107,15 +100,11 @@ export default function CreateShipmentPage() {
       containers,
       documents: documents.map((f) => f.name),
     };
-
-    // Store temporarily for preview page
     sessionStorage.setItem("shipmentPreview", JSON.stringify(data));
-
-    // Navigate to admin/previewShipment
     router.push("/admin/previewShipment");
   };
 
-  /* ---------------- UI ---------------- */
+
   return (
     <div className="max-w-7xl mx-auto space-y-8">
       {/* HEADER */}
@@ -180,8 +169,8 @@ export default function CreateShipmentPage() {
               </div>
 
               <FormField label="Agent">
-                <Select value={agent} onValueChange={setAgent} className="w-full">
-                  <SelectTrigger>
+                <Select value={agent} onValueChange={setAgent}>
+                  <SelectTrigger className="w-full">
                     <SelectValue placeholder="Forwarding Agent Name" />
                   </SelectTrigger>
                   <SelectContent>

@@ -7,9 +7,9 @@ import { LayoutGrid, PackagePlus, Archive, MapPin, Users } from "lucide-react";
 const items = [
   { label: "Dashboard", href: "/admin", icon: LayoutGrid },
   { label: "New Shipment", href: "/admin/newShipment", icon: PackagePlus },
-  { label: "All Shipments", href: "/admin/all-shipments", icon: Archive },
+  { label: "All Shipments", href: "/admin/allShipments", icon: Archive },
   { label: "Tracking", href: "/admin/tracking", icon: MapPin },
-  { label: "Agents & Clients", href: "/admin/agents-clients", icon: Users },
+  { label: "Agents & Clients", href: "/admin/agents", icon: Users },
 ];
 
 interface SidebarProps {
