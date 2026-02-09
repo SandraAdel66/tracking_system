@@ -1,15 +1,15 @@
-"use client"
+"use client";
 
-import { useEffect, useState } from "react"
-import { TrendingUp } from "lucide-react"
-import { Bar, BarChart, CartesianGrid, XAxis, ResponsiveContainer } from "recharts"
+import * as React from "react";
+import { TrendingUp } from "lucide-react";
+import { Bar, BarChart, CartesianGrid, XAxis, ResponsiveContainer } from "recharts";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@/components/ui/select"
+} from "@/components/ui/select";
 import {
   Card,
   CardContent,
@@ -17,14 +17,14 @@ import {
   CardFooter,
   CardHeader,
   CardTitle,
-} from "@/components/ui/card"
+} from "@/components/ui/card";
 import {
   ChartContainer,
   ChartTooltip,
   ChartTooltipContent,
   type ChartConfig,
-} from "@/components/ui/chart"
-import { Button } from "../ui/button"
+} from "@/components/ui/chart";
+import { Button } from "../ui/button";
 
 /* ---------------- CONFIG ---------------- */
 
@@ -33,11 +33,58 @@ const chartConfig = {
     label: "Shipments",
     color: "var(--chart-orange-default)",
   },
-} satisfies ChartConfig
+} satisfies ChartConfig;
 
-/* -------- FALLBACK DATA (NOT RENDERED) -------- */
+/* ---------------- TYPES ---------------- */
 
-type YearlyData = { month: string; desktop: number }
+type Scope = "all" | "mine";
+
+type YearlyData = { month: string; desktop: number };
+type MonthlyData = { period: string; desktop: number };
+
+type ShipmentStatus = "Pending" | "In Transit" | "Delivered" | "Exception";
+
+type Shipment = {
+  id: string;
+  status: ShipmentStatus;
+  assignedToUserId?: string;
+  createdAt?: string; // ISO
+};
+
+type Session = {
+  userId: string;
+  role: "admin" | "customerService" | "user";
+  email: string;
+  username: string;
+  loginAt: string;
+};
+
+const SESSION_KEY = "pfs_session_v1";
+const SHIPMENTS_KEY = "pfs_shipments_v1";
+
+function readSession(): Session | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = window.localStorage.getItem(SESSION_KEY);
+    return raw ? (JSON.parse(raw) as Session) : null;
+  } catch {
+    return null;
+  }
+}
+
+function readShipments(): Shipment[] {
+  if (typeof window === "undefined") return [];
+  try {
+    const raw = window.localStorage.getItem(SHIPMENTS_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? (parsed as Shipment[]) : [];
+  } catch {
+    return [];
+  }
+}
+
+/* -------- FALLBACK DATA (kept for safety) -------- */
 
 const fallbackYearlyData: Record<number, YearlyData[]> = {
   2023: [
@@ -68,9 +115,7 @@ const fallbackYearlyData: Record<number, YearlyData[]> = {
     { month: "November", desktop: 175 },
     { month: "December", desktop: 230 },
   ],
-}
-
-type MonthlyData = { period: string; desktop: number }
+};
 
 const fallbackMonthlyBreakdown: Record<string, MonthlyData[]> = {
   January: [
@@ -85,81 +130,167 @@ const fallbackMonthlyBreakdown: Record<string, MonthlyData[]> = {
     { period: "W3", desktop: 90 },
     { period: "W4", desktop: 65 },
   ],
+};
+
+/* ---------------- HELPERS ---------------- */
+
+const MONTHS = [
+  "January","February","March","April","May","June",
+  "July","August","September","October","November","December",
+] as const;
+
+function getMonthName(m: number) {
+  return MONTHS[m] || "January";
+}
+
+// Week buckets: 1-7, 8-14, 15-21, 22+
+function weekLabelFromDay(day: number): "W1" | "W2" | "W3" | "W4" {
+  if (day <= 7) return "W1";
+  if (day <= 14) return "W2";
+  if (day <= 21) return "W3";
+  return "W4";
+}
+
+function buildYearlyDataFromShipments(shipments: Shipment[], year: number): YearlyData[] {
+  const counts = new Array(12).fill(0);
+
+  for (const s of shipments) {
+    if (!s.createdAt) continue;
+    const d = new Date(s.createdAt);
+    if (Number.isNaN(d.getTime())) continue;
+    if (d.getFullYear() !== year) continue;
+    counts[d.getMonth()] += 1;
+  }
+
+  return MONTHS.map((month, idx) => ({
+    month,
+    desktop: counts[idx] ?? 0,
+  }));
+}
+
+function buildMonthlyBreakdownFromShipments(
+  shipments: Shipment[],
+  year: number,
+  monthName: string
+): MonthlyData[] {
+  const monthIndex = MONTHS.findIndex((m) => m === monthName);
+  if (monthIndex < 0) return [
+    { period: "W1", desktop: 0 },
+    { period: "W2", desktop: 0 },
+    { period: "W3", desktop: 0 },
+    { period: "W4", desktop: 0 },
+  ];
+
+  const buckets: Record<"W1" | "W2" | "W3" | "W4", number> = {
+    W1: 0, W2: 0, W3: 0, W4: 0,
+  };
+
+  for (const s of shipments) {
+    if (!s.createdAt) continue;
+    const d = new Date(s.createdAt);
+    if (Number.isNaN(d.getTime())) continue;
+    if (d.getFullYear() !== year) continue;
+    if (d.getMonth() !== monthIndex) continue;
+
+    const w = weekLabelFromDay(d.getDate());
+    buckets[w] += 1;
+  }
+
+  return [
+    { period: "W1", desktop: buckets.W1 },
+    { period: "W2", desktop: buckets.W2 },
+    { period: "W3", desktop: buckets.W3 },
+    { period: "W4", desktop: buckets.W4 },
+  ];
 }
 
 /* ---------------- COMPONENT ---------------- */
 
-export function ChartBar() {
-  const [year, setYear] = useState(2024)
-  const [data, setData] = useState<YearlyData[]>([])
-  const [selectedMonth, setSelectedMonth] = useState<string | null>(null)
+export function ChartBar({ scope }: { scope: Scope }) {
+  const [year, setYear] = React.useState(2024);
+  const [data, setData] = React.useState<YearlyData[]>([]);
+  const [selectedMonth, setSelectedMonth] = React.useState<string | null>(null);
 
-  const years = Array.from({ length: new Date().getFullYear() - 2022 }, (_, i) => 2023 + i)
+  const years = React.useMemo(
+    () => Array.from({ length: new Date().getFullYear() - 2022 }, (_, i) => 2023 + i),
+    []
+  );
 
-  useEffect(() => {
-    async function loadData() {
-      try {
-        const res = await fetch(`/api/shipments?year=${year}`)
-        if (!res.ok) throw new Error("API error")
-        const json = await res.json()
-        setData(json)
-      } catch {
-        setData(fallbackYearlyData[year] || [])
-      }
-      setSelectedMonth(null)
-    }
+  React.useEffect(() => {
+    const session = readSession();
+    const all = readShipments();
 
-    loadData()
-  }, [year])
+    const filtered =
+      scope === "all"
+        ? all
+        : all.filter((s) => s.assignedToUserId && s.assignedToUserId === session?.userId);
 
-  const displayedData = selectedMonth
-    ? fallbackMonthlyBreakdown[selectedMonth] || []
-    : data
+    const yearly = buildYearlyDataFromShipments(filtered, year);
+
+    // If there is no local data for that year, keep your fallback behavior
+    const hasAny = yearly.some((x) => x.desktop > 0);
+    setData(hasAny ? yearly : (fallbackYearlyData[year] || []));
+
+    setSelectedMonth(null);
+  }, [year, scope]);
+
+  const displayedData: (YearlyData | MonthlyData)[] = selectedMonth
+    ? (() => {
+        const session = readSession();
+        const all = readShipments();
+        const filtered =
+          scope === "all"
+            ? all
+            : all.filter((s) => s.assignedToUserId && s.assignedToUserId === session?.userId);
+
+        const monthly = buildMonthlyBreakdownFromShipments(filtered, year, selectedMonth);
+        const hasAny = monthly.some((x) => x.desktop > 0);
+
+        return hasAny ? monthly : (fallbackMonthlyBreakdown[selectedMonth] || []);
+      })()
+    : data;
 
   return (
     <Card className="w-full">
       <CardHeader>
-  <div className="flex items-center justify-between">
-    {/* Left side: title */}
-    <div>
-      <CardTitle>Shipments Overview</CardTitle>
-      <CardDescription>
-        {selectedMonth ? `${selectedMonth} ${year}` : `Year ${year}`}
-      </CardDescription>
-    </div>
+        <div className="flex items-center justify-between">
+          {/* Left side: title */}
+          <div>
+            <CardTitle>Shipments Overview</CardTitle>
+            <CardDescription>
+              {selectedMonth ? `${selectedMonth} ${year}` : `Year ${year}`}
+            </CardDescription>
+          </div>
 
-    {/* Right side: controls */}
-    <div className="flex items-center gap-3">
-      {/* Back button (only in drill-down mode) */}
-      {selectedMonth && (
-        <Button
-          className=" bg-[#f26d21] hover:bg-[#f26d21]/90 font-bold"
-          size="sm"
-          onClick={() => setSelectedMonth(null)}
-        >
-          Back to Year
-        </Button>
-      )}
+          {/* Right side: controls */}
+          <div className="flex items-center gap-3">
+            {/* Back button (only in drill-down mode) */}
+            {selectedMonth && (
+              <Button
+                className=" bg-[#f26d21] hover:bg-[#f26d21]/90 font-bold"
+                size="sm"
+                onClick={() => setSelectedMonth(null)}
+              >
+                Back to Year
+              </Button>
+            )}
 
-      {/* Year dropdown */}
-      <Select
-        value={String(year)}
-        onValueChange={(value) => setYear(Number(value))}
-      >
-        <SelectTrigger className="w-[110px]">
-          <SelectValue placeholder="Year" />
-        </SelectTrigger>
-        <SelectContent>
-          {years.map((y) => (
-            <SelectItem key={y} value={String(y)}>
-              {y}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
-    </div>
-  </div>
-</CardHeader>
+            {/* Year dropdown */}
+            <Select value={String(year)} onValueChange={(value) => setYear(Number(value))}>
+              <SelectTrigger className="w-[110px]">
+                <SelectValue placeholder="Year" />
+              </SelectTrigger>
+              <SelectContent>
+                {years.map((y) => (
+                  <SelectItem key={y} value={String(y)}>
+                    {y}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+      </CardHeader>
 
       {/* CHART AREA */}
       <CardContent className="h-[35vh] w-full">
@@ -169,7 +300,7 @@ export function ChartBar() {
               data={displayedData}
               onClick={(e) => {
                 if (!selectedMonth && e.activePayload?.[0]?.payload?.month) {
-                  setSelectedMonth(e.activePayload[0].payload.month)
+                  setSelectedMonth(e.activePayload[0].payload.month);
                 }
               }}
             >
@@ -178,20 +309,15 @@ export function ChartBar() {
                 dataKey={selectedMonth ? "period" : "month"}
                 tickLine={false}
                 axisLine={false}
-                tickFormatter={(v: string) =>
-                  selectedMonth ? v : v.slice(0, 3)
-                }
+                tickFormatter={(v: string) => (selectedMonth ? v : v.slice(0, 3))}
               />
-              <ChartTooltip
-                cursor={false}
-                content={<ChartTooltipContent hideLabel />}
+              <ChartTooltip cursor={false} content={<ChartTooltipContent hideLabel />} />
+              <Bar
+                dataKey="desktop"
+                radius={8}
+                fill="var(--color-desktop)"
+                activeBar={{ fill: "var(--chart-orange-hover)" }}
               />
-             <Bar
-             dataKey="desktop"
-             radius={8}
-             fill="var(--color-desktop)"
-             activeBar={{ fill: "var(--chart-orange-hover)" }}
-             />
             </BarChart>
           </ResponsiveContainer>
         </ChartContainer>
@@ -204,5 +330,5 @@ export function ChartBar() {
         Click a month to view detailed breakdown
       </CardFooter>
     </Card>
-  )
+  );
 }

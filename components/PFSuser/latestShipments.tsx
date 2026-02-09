@@ -1,6 +1,6 @@
-"use client"
+"use client";
 
-import * as React from "react"
+import * as React from "react";
 import {
   type ColumnDef,
   type ColumnFiltersState,
@@ -11,11 +11,11 @@ import {
   getFilteredRowModel,
   getSortedRowModel,
   useReactTable,
-} from "@tanstack/react-table"
+} from "@tanstack/react-table";
 
-import { Badge } from "@/components/ui/badge"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import {
   Table,
   TableBody,
@@ -23,9 +23,9 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-} from "@/components/ui/table"
+} from "@/components/ui/table";
 
-import { ArrowUpDown, ChevronDown, Search ,Plane, Ship} from "lucide-react"
+import { ArrowUpDown, ChevronDown, Search, Plane, Ship } from "lucide-react";
 
 import {
   DropdownMenu,
@@ -34,16 +34,66 @@ import {
   DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
+} from "@/components/ui/dropdown-menu";
+
+type Scope = "all" | "mine";
+
+type Role = "admin" | "customerService" | "user";
+
+type Session = {
+  userId: string;
+  role: Role;
+  email: string;
+  username: string;
+  loginAt: string;
+};
+
+const SESSION_KEY = "pfs_session_v1";
+const SHIPMENTS_KEY = "pfs_shipments_v1";
+
+function readSession(): Session | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = window.localStorage.getItem(SESSION_KEY);
+    return raw ? (JSON.parse(raw) as Session) : null;
+  } catch {
+    return null;
+  }
+}
+
+type LocalShipment = {
+  id: string;
+  blNumber?: string;
+  origin?: string;
+  destination?: string;
+  carrier?: string;
+  type?: "FCL" | "Air";
+  status?: "In Transit" | "Pending" | "Delivered" | "Exception" | "Exceptions";
+  eta?: string; // ISO date
+  assignedToUserId?: string;
+  createdAt?: string;
+};
+
+function readLocalShipments(): LocalShipment[] {
+  if (typeof window === "undefined") return [];
+  try {
+    const raw = window.localStorage.getItem(SHIPMENTS_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? (parsed as LocalShipment[]) : [];
+  } catch {
+    return [];
+  }
+}
 
 interface Shipment {
-  blNumber: string
-  origin: string
-  destination: string
-  carrier: string
-  type: "FCL" | "Air"
-  status: "In Transit" | "Pending" | "Delivered" | "Exceptions"
-  eta: string
+  blNumber: string;
+  origin: string;
+  destination: string;
+  carrier: string;
+  type: "FCL" | "Air";
+  status: "In Transit" | "Pending" | "Delivered" | "Exceptions";
+  eta: string;
 }
 
 const mockShipments: Shipment[] = [
@@ -101,32 +151,78 @@ const mockShipments: Shipment[] = [
     status: "Pending",
     eta: "2026-02-10",
   },
-]
+];
 
-export default function ShipmentsTable() {
-  const [data, setData] = React.useState<Shipment[]>([])
-  const [loading, setLoading] = React.useState(true)
-  const [sorting, setSorting] = React.useState<SortingState>([])
-  const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>([])
-  const [columnVisibility, setColumnVisibility] = React.useState<VisibilityState>({})
-  const [rowSelection, setRowSelection] = React.useState({})
-  const [pageSize, setPageSize] = React.useState(10)
+function toTableShipment(s: LocalShipment): Shipment | null {
+  // minimal mapping + safe defaults so UI doesn't break
+  const blNumber = s.blNumber || s.id;
+  const origin = s.origin || "—";
+  const destination = s.destination || "—";
+  const carrier = s.carrier || "—";
+  const type = s.type || "FCL";
+
+  // Normalize "Exception" -> "Exceptions" to match your UI statuses
+  const rawStatus = s.status || "Pending";
+  const status: Shipment["status"] =
+    rawStatus === "Exception" ? "Exceptions" : (rawStatus as Shipment["status"]);
+
+  const eta = s.eta || (s.createdAt ? s.createdAt.slice(0, 10) : "2026-02-10");
+
+  return { blNumber, origin, destination, carrier, type, status, eta };
+}
+
+export default function ShipmentsTable({ scope }: { scope: Scope }) {
+  const [data, setData] = React.useState<Shipment[]>([]);
+  const [loading, setLoading] = React.useState(true);
+  const [sorting, setSorting] = React.useState<SortingState>([]);
+  const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>(
+    []
+  );
+  const [columnVisibility, setColumnVisibility] =
+    React.useState<VisibilityState>({});
+  const [rowSelection, setRowSelection] = React.useState({});
+  const [pageSize, setPageSize] = React.useState(10);
 
   React.useEffect(() => {
-    const fetchShipments = async () => {
-      try {
-        const res = await fetch("https://api.example.com/shipments", { cache: "no-store" })
-        if (!res.ok) throw new Error("API failed")
-        const apiData: Shipment[] = await res.json()
-        setData(apiData)
-      } catch {
-        setData(mockShipments)
-      } finally {
-        setLoading(false)
+    const load = () => {
+      const session = readSession();
+      const local = readLocalShipments();
+
+      // If no local shipments yet, keep your mock data (same UI behavior)
+      if (!local.length) {
+        setData(mockShipments);
+        setLoading(false);
+        return;
       }
-    }
-    fetchShipments()
-  }, [])
+
+      const filtered =
+        scope === "all"
+          ? local
+          : local.filter(
+              (s) => s.assignedToUserId && s.assignedToUserId === session?.userId
+            );
+
+      const mapped = filtered
+        .map(toTableShipment)
+        .filter(Boolean) as Shipment[];
+
+      // If filter results empty (e.g. CS with no assigned shipments), show empty state
+      setData(mapped);
+      setLoading(false);
+    };
+
+    load();
+
+    // live update after login/logout or other tab changes
+    const onSessionChanged = () => load();
+    window.addEventListener("session-changed", onSessionChanged);
+    window.addEventListener("storage", onSessionChanged);
+
+    return () => {
+      window.removeEventListener("session-changed", onSessionChanged);
+      window.removeEventListener("storage", onSessionChanged);
+    };
+  }, [scope]);
 
   const columns: ColumnDef<Shipment>[] = [
     {
@@ -159,25 +255,28 @@ export default function ShipmentsTable() {
         const Icon = type === "FCL" ? Ship : Plane;
 
         return (
-          <Badge variant="outline" className="font-medium flex items-center gap-1">
+          <Badge
+            variant="outline"
+            className="font-medium flex items-center gap-1"
+          >
             <Icon className="h-4 w-4" />
             {type}
           </Badge>
-        )
+        );
       },
     },
     {
       accessorKey: "status",
       header: "Status",
       cell: ({ row }) => {
-        const status = row.getValue("status") as Shipment["status"]
+        const status = row.getValue("status") as Shipment["status"];
 
         const styles: Record<string, string> = {
           "In Transit": "border-purple-600 bg-purple-100 text-purple-700",
           Pending: "border-amber-500 bg-amber-100 text-amber-700",
           Delivered: "border-emerald-500 bg-emerald-100 text-emerald-700",
           Exceptions: "border-red-500 bg-red-50 text-red-700",
-        }
+        };
 
         return (
           <span
@@ -186,7 +285,7 @@ export default function ShipmentsTable() {
             <span className="h-2 w-2 rounded-full bg-current opacity-70" />
             {status}
           </span>
-        )
+        );
       },
     },
     {
@@ -198,7 +297,7 @@ export default function ShipmentsTable() {
         </span>
       ),
     },
-  ]
+  ];
 
   const table = useReactTable({
     data,
@@ -211,17 +310,17 @@ export default function ShipmentsTable() {
     onColumnVisibilityChange: setColumnVisibility,
     onRowSelectionChange: setRowSelection,
     state: { sorting, columnFilters, columnVisibility, rowSelection },
-  })
+  });
 
   if (loading) {
     return (
       <div className="flex h-64 items-center justify-center text-gray-500">
         Loading shipments...
       </div>
-    )
+    );
   }
 
-  const rows = table.getRowModel().rows.slice(0, pageSize)
+  const rows = table.getRowModel().rows.slice(0, pageSize);
 
   return (
     <div className="w-full px-8 py-6">
@@ -238,7 +337,9 @@ export default function ShipmentsTable() {
             <Input
               className="pl-10"
               placeholder="Search B/L Number..."
-              value={(table.getColumn("blNumber")?.getFilterValue() as string) ?? ""}
+              value={
+                (table.getColumn("blNumber")?.getFilterValue() as string) ?? ""
+              }
               onChange={(e) =>
                 table.getColumn("blNumber")?.setFilterValue(e.target.value)
               }
@@ -257,31 +358,51 @@ export default function ShipmentsTable() {
             <DropdownMenuContent align="end">
               <DropdownMenuLabel>Sort by</DropdownMenuLabel>
               <DropdownMenuSeparator />
-              <DropdownMenuItem onClick={() => table.getColumn("blNumber")?.toggleSorting(false)}>
+              <DropdownMenuItem
+                onClick={() =>
+                  table.getColumn("blNumber")?.toggleSorting(false)
+                }
+              >
                 B/L Number (A-Z)
               </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => table.getColumn("blNumber")?.toggleSorting(true)}>
+              <DropdownMenuItem
+                onClick={() => table.getColumn("blNumber")?.toggleSorting(true)}
+              >
                 B/L Number (Z-A)
               </DropdownMenuItem>
               <DropdownMenuSeparator />
-              <DropdownMenuItem onClick={() => table.getColumn("eta")?.toggleSorting(false)}>
+              <DropdownMenuItem
+                onClick={() => table.getColumn("eta")?.toggleSorting(false)}
+              >
                 ETA (Earliest)
               </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => table.getColumn("eta")?.toggleSorting(true)}>
+              <DropdownMenuItem
+                onClick={() => table.getColumn("eta")?.toggleSorting(true)}
+              >
                 ETA (Latest)
               </DropdownMenuItem>
               <DropdownMenuSeparator />
-              <DropdownMenuItem onClick={() => table.getColumn("status")?.toggleSorting(false)}>
+              <DropdownMenuItem
+                onClick={() =>
+                  table.getColumn("status")?.toggleSorting(false)
+                }
+              >
                 Status (A-Z)
               </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => table.getColumn("status")?.toggleSorting(true)}>
+              <DropdownMenuItem
+                onClick={() => table.getColumn("status")?.toggleSorting(true)}
+              >
                 Status (Z-A)
               </DropdownMenuItem>
               <DropdownMenuSeparator />
-              <DropdownMenuItem onClick={() => table.getColumn("type")?.toggleSorting(false)}>
+              <DropdownMenuItem
+                onClick={() => table.getColumn("type")?.toggleSorting(false)}
+              >
                 Type (A-Z)
               </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => table.getColumn("type")?.toggleSorting(true)}>
+              <DropdownMenuItem
+                onClick={() => table.getColumn("type")?.toggleSorting(true)}
+              >
                 Type (Z-A)
               </DropdownMenuItem>
             </DropdownMenuContent>
@@ -309,7 +430,10 @@ export default function ShipmentsTable() {
             {table.getHeaderGroups().map((headerGroup) => (
               <TableRow key={headerGroup.id}>
                 {headerGroup.headers.map((header) => (
-                  <TableHead key={header.id} className="text-normal text-gray-600">
+                  <TableHead
+                    key={header.id}
+                    className="text-normal text-gray-600"
+                  >
                     {flexRender(
                       header.column.columnDef.header,
                       header.getContext()
@@ -329,7 +453,10 @@ export default function ShipmentsTable() {
                 >
                   {row.getVisibleCells().map((cell) => (
                     <TableCell key={cell.id} className="py-4">
-                      {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                      {flexRender(
+                        cell.column.columnDef.cell,
+                        cell.getContext()
+                      )}
                     </TableCell>
                   ))}
                 </TableRow>
@@ -371,5 +498,5 @@ export default function ShipmentsTable() {
         </div>
       </div>
     </div>
-  )
+  );
 }
