@@ -1,7 +1,5 @@
+import DashboardPage from "@/app/src/features/dashboard/DashboardPage";
 
-
-export default function CustomerService() {
-  return (
-    <h1>Welcome to Customer Service</h1>
-  );
+export default function Page() {
+  return <DashboardPage />;
 }

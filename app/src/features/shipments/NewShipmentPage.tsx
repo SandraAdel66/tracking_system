@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { readSession } from "@/lib/session";
 import {
   Select,
   SelectContent,
@@ -12,12 +13,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Dialog,
   DialogContent,
@@ -27,6 +23,7 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { User, Ship, Container, FileText, Plus, ArrowRight } from "lucide-react";
+import type { Shipment } from "@/types/shipment";
 
 /* COUNTRY → CITY DATA */
 const countriesData: Record<string, string[]> = {
@@ -36,7 +33,6 @@ const countriesData: Record<string, string[]> = {
 };
 const countries = Object.keys(countriesData);
 
-/* --- FormField Component for spacing --- */
 function FormField({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div className="space-y-1">
@@ -48,6 +44,7 @@ function FormField({ label, children }: { label: string; children: React.ReactNo
 
 export default function CreateShipmentPage() {
   const router = useRouter();
+
   const [blNumber, setBlNumber] = useState("");
   const [salesman, setSalesman] = useState("");
   const [shipper, setShipper] = useState("");
@@ -58,13 +55,15 @@ export default function CreateShipmentPage() {
   const [selectedLine, setSelectedLine] = useState<string | undefined>();
   const [newLineName, setNewLineName] = useState("");
   const [arabicName, setArabicName] = useState("");
-  const [lineDialogOpen, setLineDialogOpen] = useState(false); // control modal
+  const [lineDialogOpen, setLineDialogOpen] = useState(false);
 
   const [polCountry, setPolCountry] = useState<string | null>(null);
+  const [polCity, setPolCity] = useState<string | null>(null);
+
   const [podCountry, setPodCountry] = useState<string | null>(null);
+  const [podCity, setPodCity] = useState<string | null>(null);
 
   const [containers, setContainers] = useState([{ id: "", type: "" }]);
-
   const [documents, setDocuments] = useState<File[]>([]);
 
   const addShippingLine = () => {
@@ -73,7 +72,7 @@ export default function CreateShipmentPage() {
     setSelectedLine(newLineName);
     setNewLineName("");
     setArabicName("");
-    setLineDialogOpen(false); // Close modal after save
+    setLineDialogOpen(false);
   };
 
   const addContainer = () => setContainers((prev) => [...prev, { id: "", type: "" }]);
@@ -88,31 +87,43 @@ export default function CreateShipmentPage() {
   };
 
   const handleSaveShipment = () => {
-    const data = {
+    const session = readSession();
+    if (!session?.role || !session.userId) {
+      router.replace("/");
+      return;
+    }
+
+    const data: Shipment = {
+      id: crypto.randomUUID(),
       blNumber,
       salesman,
       shipper,
       consignee,
       agent,
-      shippingLine: selectedLine,
-      polCountry,
-      podCountry,
+      polCountry: polCountry ?? "",
+      polCity: polCity ?? "",
+      podCountry: podCountry ?? "",
+      podCity: podCity ?? "",
+      carrier: selectedLine ?? "",
       containers,
       documents: documents.map((f) => f.name),
+      status: "Pending",
+      createdAt: new Date().toISOString(),
+      createdByUserId: session.userId,
+      trackingEvents: [],
     };
-    sessionStorage.setItem("shipmentPreview", JSON.stringify(data));
-    router.push("/admin/previewShipment");
-  };
 
+    sessionStorage.setItem("shipmentPreview", JSON.stringify(data));
+
+    const base = session.role === "customerService" ? "/customerService" : "/admin";
+    router.push(`${base}/previewShipment`);
+  };
 
   return (
     <div className="max-w-7xl mx-auto space-y-8">
-      {/* HEADER */}
       <div className="flex justify-between items-center">
         <div>
-          <h1 className="text-2xl font-semibold text-[#37384E]">
-            Create New Shipment
-          </h1>
+          <h1 className="text-2xl font-semibold text-[#37384E]">Create New Shipment</h1>
           <p className="text-sm text-muted-foreground">
             Fill in the details below to register a new freight order
           </p>
@@ -125,9 +136,7 @@ export default function CreateShipmentPage() {
       </div>
 
       <div className="grid grid-cols-12 gap-6">
-        {/* LEFT — 60% */}
         <div className="col-span-12 lg:col-span-8 space-y-6">
-          {/* Parties & Reference */}
           <Card>
             <CardHeader className="flex items-center gap-2">
               <User className="text-[#f26d21]" />
@@ -136,35 +145,19 @@ export default function CreateShipmentPage() {
             <CardContent className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
                 <FormField label="Bill of Lading (B/L) Number">
-                  <Input
-                    placeholder="e.g. MEDU1234567"
-                    value={blNumber}
-                    onChange={(e) => setBlNumber(e.target.value)}
-                  />
+                  <Input value={blNumber} onChange={(e) => setBlNumber(e.target.value)} />
                 </FormField>
                 <FormField label="Salesman">
-                  <Input
-                    placeholder="Internal Sales Representative"
-                    value={salesman}
-                    onChange={(e) => setSalesman(e.target.value)}
-                  />
+                  <Input value={salesman} onChange={(e) => setSalesman(e.target.value)} />
                 </FormField>
               </div>
 
               <div className="grid grid-cols-2 gap-4">
                 <FormField label="Shipper">
-                  <Input
-                    placeholder="Company Name"
-                    value={shipper}
-                    onChange={(e) => setShipper(e.target.value)}
-                  />
+                  <Input value={shipper} onChange={(e) => setShipper(e.target.value)} />
                 </FormField>
                 <FormField label="Consignee">
-                  <Input
-                    placeholder="Receiver Company"
-                    value={consignee}
-                    onChange={(e) => setConsignee(e.target.value)}
-                  />
+                  <Input value={consignee} onChange={(e) => setConsignee(e.target.value)} />
                 </FormField>
               </div>
 
@@ -182,7 +175,6 @@ export default function CreateShipmentPage() {
             </CardContent>
           </Card>
 
-          {/* Route & Carrier */}
           <Card>
             <CardHeader className="flex items-center gap-2">
               <Ship className="text-[#f26d21]" />
@@ -191,7 +183,7 @@ export default function CreateShipmentPage() {
             <CardContent className="space-y-6">
               <FormField label="Shipping Line">
                 <div className="flex gap-2 mt-1">
-                  <Select value={selectedLine} onValueChange={setSelectedLine} >
+                  <Select value={selectedLine} onValueChange={setSelectedLine}>
                     <SelectTrigger className="w-full">
                       <SelectValue placeholder="Select Shipping Line" />
                     </SelectTrigger>
@@ -235,7 +227,13 @@ export default function CreateShipmentPage() {
 
               <div className="grid grid-cols-2 gap-4">
                 <FormField label="POL Country">
-                  <Select onValueChange={setPolCountry} >
+                  <Select
+                    value={polCountry ?? ""}
+                    onValueChange={(v) => {
+                      setPolCountry(v);
+                      setPolCity(null);
+                    }}
+                  >
                     <SelectTrigger className="w-full">
                       <SelectValue placeholder="Select Country" />
                     </SelectTrigger>
@@ -250,7 +248,7 @@ export default function CreateShipmentPage() {
                 </FormField>
 
                 <FormField label="POL City">
-                  <Select disabled={!polCountry} >
+                  <Select value={polCity ?? ""} onValueChange={setPolCity} disabled={!polCountry}>
                     <SelectTrigger className="w-full">
                       <SelectValue placeholder="Select City" />
                     </SelectTrigger>
@@ -268,7 +266,13 @@ export default function CreateShipmentPage() {
 
               <div className="grid grid-cols-2 gap-4">
                 <FormField label="POD Country">
-                  <Select onValueChange={setPodCountry} >
+                  <Select
+                    value={podCountry ?? ""}
+                    onValueChange={(v) => {
+                      setPodCountry(v);
+                      setPodCity(null);
+                    }}
+                  >
                     <SelectTrigger className="w-full">
                       <SelectValue placeholder="Select Country" />
                     </SelectTrigger>
@@ -283,7 +287,7 @@ export default function CreateShipmentPage() {
                 </FormField>
 
                 <FormField label="POD City">
-                  <Select disabled={!podCountry} >
+                  <Select value={podCity ?? ""} onValueChange={setPodCity} disabled={!podCountry}>
                     <SelectTrigger className="w-full">
                       <SelectValue placeholder="Select City" />
                     </SelectTrigger>
@@ -302,9 +306,7 @@ export default function CreateShipmentPage() {
           </Card>
         </div>
 
-        {/* RIGHT — Containers & Documents */}
         <div className="col-span-12 lg:col-span-4 space-y-6">
-          {/* Cargo Details */}
           <Card>
             <CardHeader className="flex items-center gap-2">
               <Container className="text-[#f26d21]" />
@@ -336,7 +338,6 @@ export default function CreateShipmentPage() {
             </CardContent>
           </Card>
 
-          {/* Documents */}
           <Card>
             <CardHeader className="flex items-center gap-2">
               <FileText className="text-[#f26d21]" />

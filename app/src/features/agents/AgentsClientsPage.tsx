@@ -62,7 +62,7 @@ export default function AgentsPage() {
     }
   }, [])
 
-  // ✅ rerender when agents are added
+  // rerender when agents are added
   const [agentsVersion, setAgentsVersion] = React.useState(0)
   React.useEffect(() => {
     const handler = () => setAgentsVersion((v) => v + 1)
@@ -76,6 +76,7 @@ export default function AgentsPage() {
 
   const AGENTS = React.useMemo(() => {
     return getAllAgents(BASE_AGENTS)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [agentsVersion])
 
   const countries = React.useMemo(() => {
@@ -96,6 +97,7 @@ export default function AgentsPage() {
       const matchesCountry = country === "All" ? true : a.country === country
       return matchesQuery && matchesCountry
     })
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [query, country, AGENTS, statusVersion])
 
   return (

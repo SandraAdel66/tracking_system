@@ -44,7 +44,7 @@ export default function Dashboard() {
           <div className="bg-white p-6 w-full">
             <ChartBar scope={scope} />
           </div>
-          <LatestShipments scope={scope} />
+          <LatestShipments />
         </div>
       </div>
     </div>

@@ -5,6 +5,8 @@ import { useRouter } from "next/navigation";
 import Image from "next/image";
 import { usePageTitle } from "@/hooks/usePageTitle";
 
+const SESSION_KEY = "pfs_session_v1";
+
 interface NavbarProps {
   userName: string;
   role: string;
@@ -17,7 +19,7 @@ export default function Navbar({
   role,
   avatarUrl,
   titleOverride,
-}: NavbarProps) {
+}: NavbarProps): import("react/jsx-runtime").JSX.Element {
   const [open, setOpen] = useState(false);
   const router = useRouter();
 
@@ -25,7 +27,17 @@ export default function Navbar({
   const title = titleOverride ?? autoTitle;
 
   const handleLogout = () => {
-    router.push("/");
+    //  Clear session
+    localStorage.removeItem(SESSION_KEY);
+
+    //  Notify app (sidebar, guards, etc.)
+    window.dispatchEvent(new Event("session-changed"));
+
+    //  Redirect to login and replace history
+    router.replace("/");
+
+    //  Close dropdown
+    setOpen(false);
   };
 
   const profileImage =
