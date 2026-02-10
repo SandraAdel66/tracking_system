@@ -86,7 +86,7 @@ function writeSession(session: Session) {
 function redirectForRole(role: Role) {
   if (role === "admin") return "/admin";
   if (role === "customerService") return "/customerService";
-  return "/tracking";
+  return "/user/track";
 }
 
 export default function AuthenticationForm() {

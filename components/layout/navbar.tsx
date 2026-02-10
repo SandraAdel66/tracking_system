@@ -44,7 +44,7 @@ export default function Navbar({
     avatarUrl && avatarUrl.trim() !== "" ? avatarUrl : "/profile.png";
 
   return (
-    <nav className="w-full h-20 bg-white border-b flex items-center justify-between px-6">
+    <nav className="h-20 bg-white border-b flex items-center justify-between px-6">
       <h1 className="text-xl font-semibold">{title}</h1>
 
       <div className="relative">
