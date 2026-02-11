@@ -19,6 +19,16 @@ function safeParse<T>(value: string | null): T | null {
   }
 }
 
+/**
+ * ✅ Normalization helper for user searches:
+ * - lowercases
+ * - removes spaces, dashes, slashes, etc.
+ * so BL123456789 matches "BL 123456789" or "bl-123456789"
+ */
+export function normalizeLookup(value: string) {
+  return (value || "").trim().toLowerCase().replace(/[^a-z0-9]/g, "");
+}
+
 export function getShipments(): Shipment[] {
   if (typeof window === "undefined") return [];
   const parsed = safeParse<Shipment[]>(localStorage.getItem(STORAGE_KEY));
@@ -46,8 +56,34 @@ export function findShipmentById(id: string): Shipment | undefined {
   return getShipments().find((s) => s.id === id);
 }
 
+/**
+ * ✅ Keep old behavior (strict match) for admin/customerService flows.
+ */
 export function findShipmentByBL(blNumber: string): Shipment | undefined {
   return getShipments().find((s) => s.blNumber === blNumber);
+}
+
+/**
+ * ✅ NEW: User-friendly BL lookup (normalized match).
+ * Use this in /user/track pages.
+ */
+export function findShipmentByBLNormalized(blNumber: string): Shipment | undefined {
+  const q = normalizeLookup(blNumber);
+  if (!q) return undefined;
+
+  return getShipments().find((s) => normalizeLookup(s.blNumber) === q);
+}
+
+/**
+ * ✅ NEW: User-friendly Container lookup (normalized match).
+ */
+export function findShipmentByContainerNormalized(containerId: string): Shipment | undefined {
+  const q = normalizeLookup(containerId);
+  if (!q) return undefined;
+
+  return getShipments().find((s) =>
+    (s.containers || []).some((c) => normalizeLookup(c.id) === q)
+  );
 }
 
 export function updateShipmentById(id: string, patch: Partial<Shipment>) {
@@ -73,8 +109,8 @@ export function addTrackingEventAndUpdateStatus(
 
     return {
       ...s,
-      status: event.status, //  shipment status becomes latest event status
-      trackingEvents: [newEvent, ...(s.trackingEvents ?? [])], // newest first
+      status: event.status,
+      trackingEvents: [newEvent, ...(s.trackingEvents ?? [])],
     };
   });
 
