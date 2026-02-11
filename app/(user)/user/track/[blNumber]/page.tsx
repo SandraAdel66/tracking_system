@@ -8,15 +8,14 @@ import {
   Truck,
   MapPin,
   CheckCircle2,
-  Anchor,
-  ArrowUpRight,
-  FileText,
   Share2,
+  Clock,
 } from "lucide-react";
 
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 
+import WorldRouteMap from "@/components/PFSuser/WorldRouteMap";
 import { findShipmentByBLNormalized } from "@/lib/shipmentsStore";
 import type { Shipment, TrackingEvent, ShipmentStatus } from "@/types/shipment";
 
@@ -51,7 +50,6 @@ function formatPrettyTime(iso?: string) {
 }
 
 function statusPillClass(status: ShipmentStatus) {
-  // screenshot uses orange pill for In Transit
   if (status === "In Transit") return "bg-orange-50 text-[#f26d21]";
   if (status === "Delivered") return "bg-green-50 text-green-600";
   if (status === "Exceptions") return "bg-red-50 text-red-600";
@@ -59,30 +57,10 @@ function statusPillClass(status: ShipmentStatus) {
 }
 
 function stepIndexFromStatus(status: ShipmentStatus) {
-  // 5-step UI; your DB has 4 statuses
-  // Pending -> step 0
-  // In Transit / Exceptions -> step 2
-  // Delivered -> step 4
   if (status === "Delivered") return 4;
   if (status === "In Transit") return 2;
   if (status === "Exceptions") return 2;
-  return 0;
-}
-
-function TimelineIcon({ event }: { event: TrackingEvent }) {
-  // Icon choice to mimic screenshot feel
-  // You only have 4 statuses; we style the "latest" item via props in HistoryItem
-  switch (event.status) {
-    case "In Transit":
-      return <Anchor className="h-4 w-4" />;
-    case "Delivered":
-      return <CheckCircle2 className="h-4 w-4" />;
-    case "Exceptions":
-      return <ArrowUpRight className="h-4 w-4" />;
-    case "Pending":
-    default:
-      return <FileText className="h-4 w-4" />;
-  }
+  return 0; // Pending
 }
 
 function InfoRow({
@@ -99,7 +77,7 @@ function InfoRow({
       <span className="text-sm text-gray-500">{label}</span>
       <span
         className={[
-          "text-sm font-semibold",
+          "text-sm font-semibold text-right max-w-[60%]",
           highlight ? "text-[#f26d21]" : "text-[#111827]",
         ].join(" ")}
       >
@@ -120,7 +98,6 @@ function HistoryItem({
 }) {
   return (
     <div className="relative flex gap-4">
-      {/* left timeline column */}
       <div className="relative flex flex-col items-center">
         <div
           className={[
@@ -130,24 +107,25 @@ function HistoryItem({
               : "bg-gray-100 text-gray-400",
           ].join(" ")}
         >
-          <TimelineIcon event={event} />
+          <Clock className="h-4 w-4" />
         </div>
 
-        {/* vertical line */}
-        {!isLast ? (
-          <div className="mt-2 w-[2px] flex-1 bg-gray-100" />
-        ) : null}
+        {!isLast ? <div className="mt-2 w-[2px] flex-1 bg-gray-100" /> : null}
       </div>
 
-      {/* content */}
       <div className="flex-1 pb-8">
         <p className="text-xs text-gray-400">{formatPrettyTime(event.eventDate)}</p>
 
-        {/* screenshot has bold title + light description */}
+        {/* Use status as title, location+desc underneath (matches DB) */}
         <p className="mt-1 text-[15px] font-bold text-[#111827]">
-          {event.location || event.status}
+          {event.status}
         </p>
-        <p className="mt-2 text-sm text-gray-500">{event.description || "-"}</p>
+        <p className="mt-2 text-sm text-gray-500">
+          {event.location || "-"}
+        </p>
+        <p className="mt-2 text-sm text-gray-500">
+          {event.description || "-"}
+        </p>
       </div>
     </div>
   );
@@ -158,7 +136,11 @@ export default function UserTrackingDetailsPage() {
   const params = useParams<{ blNumber: string }>();
   const blParam = decodeURIComponent(params.blNumber || "");
 
-  const shipment = useMemo(() => findShipmentByBLNormalized(blParam) ?? null, [blParam]);
+  const shipment = useMemo(
+    () => findShipmentByBLNormalized(blParam) ?? null,
+    [blParam]
+  );
+
   const eventsDesc = useMemo(
     () => (shipment ? sortEventsDesc(shipment.trackingEvents || []) : []),
     [shipment]
@@ -206,6 +188,19 @@ export default function UserTrackingDetailsPage() {
   const origin = `${shipment.polCity}, ${shipment.polCountry}`;
   const destination = `${shipment.podCity}, ${shipment.podCountry}`;
 
+  // Optional anchors (can expand later)
+  const anchors: Record<string, { x: number; y: number }> = {
+    "Shanghai,CN": { x: 0.20, y: 0.55 },
+    "Rotterdam,NL": { x: 0.63, y: 0.40 },
+    "Alexandria,Egypt": { x: 0.56, y: 0.52 },
+    "Dubai,UAE": { x: 0.62, y: 0.56 },
+  };
+
+  const startKey = `${shipment.polCity},${shipment.polCountry}`;
+  const endKey = `${shipment.podCity},${shipment.podCountry}`;
+  const start = anchors[startKey] ?? { x: 0.18, y: 0.52 };
+  const end = anchors[endKey] ?? { x: 0.72, y: 0.45 };
+
   return (
     <div className="max-w-[1400px] mx-auto px-6 py-8 space-y-6">
       {/* ===== Top Header Card ===== */}
@@ -239,7 +234,6 @@ export default function UserTrackingDetailsPage() {
 
                 return (
                   <div key={s.label} className="relative flex-1">
-                    {/* connector line */}
                     {i !== 0 ? (
                       <div
                         className={`absolute left-0 top-5 h-[3px] w-full ${
@@ -312,19 +306,16 @@ export default function UserTrackingDetailsPage() {
         {/* Right: Map + Details */}
         <div className="rounded-2xl bg-white shadow-sm border border-gray-100">
           <div className="px-8 py-6">
-            {/* Map placeholder */}
             <div className="relative overflow-hidden rounded-xl border border-gray-100">
-              <img
-                src="/map-placeholder.png"
-                alt="Map"
-                className="h-[190px] w-full object-cover"
-              />
+              <WorldRouteMap className="h-[190px] w-full"
+              geometryUrl="/world-geometry.json"
+              startLabel={shipment.polCity}
+              endLabel={shipment.podCity} />
               <span className="absolute bottom-3 right-3 bg-white px-3 py-1.5 text-xs font-semibold rounded-full shadow">
                 ● Live View
               </span>
             </div>
 
-            {/* Details */}
             <div className="mt-6">
               <InfoRow label="Origin" value={origin} />
               <InfoRow label="Destination" value={destination} />

@@ -23,7 +23,6 @@ function safeParse<T>(value: string | null): T | null {
  * ✅ Normalization helper for user searches:
  * - lowercases
  * - removes spaces, dashes, slashes, etc.
- * so BL123456789 matches "BL 123456789" or "bl-123456789"
  */
 export function normalizeLookup(value: string) {
   return (value || "").trim().toLowerCase().replace(/[^a-z0-9]/g, "");
@@ -57,25 +56,23 @@ export function findShipmentById(id: string): Shipment | undefined {
 }
 
 /**
- * ✅ Keep old behavior (strict match) for admin/customerService flows.
+ * ✅ Keep strict match for admin/customerService flows (unchanged).
  */
 export function findShipmentByBL(blNumber: string): Shipment | undefined {
   return getShipments().find((s) => s.blNumber === blNumber);
 }
 
 /**
- * ✅ NEW: User-friendly BL lookup (normalized match).
- * Use this in /user/track pages.
+ * ✅ NEW: normalized match for user tracking.
  */
 export function findShipmentByBLNormalized(blNumber: string): Shipment | undefined {
   const q = normalizeLookup(blNumber);
   if (!q) return undefined;
-
   return getShipments().find((s) => normalizeLookup(s.blNumber) === q);
 }
 
 /**
- * ✅ NEW: User-friendly Container lookup (normalized match).
+ * ✅ NEW: container normalized match for user tracking.
  */
 export function findShipmentByContainerNormalized(containerId: string): Shipment | undefined {
   const q = normalizeLookup(containerId);
@@ -121,7 +118,7 @@ export function addTrackingEventAndUpdateStatus(
  * Role-aware visibility:
  * - admin: all
  * - customerService: only createdByUserId === session.userId
- * - user: none (unless you later add ownership for end-user tracking)
+ * - user: none (unchanged)
  */
 export function getShipmentsForSession(session: SessionShape | null): Shipment[] {
   if (!session?.role) return [];
