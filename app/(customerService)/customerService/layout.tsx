@@ -3,30 +3,42 @@
 import "@/styles/globals.css";
 import Sidebar from "@/components/layout/sidebar";
 import Navbar from "@/components/layout/navbar";
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { Menu, X } from "lucide-react";
 import { usePathname } from "next/navigation";
 import RequireRole from "@/components/auth/RequireRole";
 
 const pageTitles: Record<string, string> = {
-  "/admin": "Dashboard",
-  "/admin/newShipment": "New Shipment",
-  "/admin/all-shipments": "All Shipments",
-  "/admin/tracking": "Tracking",
-  "/admin/agents-clients": "Agents & Clients",
+  "/customerService": "Dashboard",
+  "/customerService/newShipment": "New Shipment",
+  "/customerService/allShipments": "All Shipments",
+  "/customerService/tracking": "Tracking",
 };
 
-export default function RootLayoutClient({
+function getTitle(pathname: string) {
+  // exact match first
+  if (pageTitles[pathname]) return pageTitles[pathname];
+
+  // longest prefix match for nested routes: /customerService/tracking/xyz
+  const match = Object.keys(pageTitles)
+    .sort((a, b) => b.length - a.length)
+    .find((key) => pathname.startsWith(key));
+
+  return match ? pageTitles[match] : "Dashboard";
+}
+
+export default function CustomerServiceLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
   const [sidebarOpen, setSidebarOpen] = useState(true);
-  const pathname = usePathname() || "/admin";
-  const currentTitle = pageTitles[pathname] || "Dashboard";
+  const pathname = usePathname() || "/customerService";
+
+  const currentTitle = useMemo(() => getTitle(pathname), [pathname]);
 
   return (
-    <RequireRole allow={["admin"]}>
+    <RequireRole allow={["customerService"]}>
       <div className="min-h-screen flex">
         {/* Sidebar column */}
         {sidebarOpen ? (
@@ -35,13 +47,12 @@ export default function RootLayoutClient({
           </div>
         ) : null}
 
-        {/* Right column: Navbar + Page (navbar starts after sidebar) */}
+        {/* Right column */}
         <div className="flex-1 min-w-0 flex flex-col">
-          {/* Navbar now NOT full width of screen, only this column */}
           <Navbar
             title={currentTitle}
             userName="John Doe"
-            role="Admin"
+            role="Customer Service"
             avatarUrl=""
           />
 
